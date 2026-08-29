@@ -1,0 +1,147 @@
+// AnyEasier 插件接口完整定义（WIT / WASI Component Model）
+// 文档：AnyEasier项目方案.md -> ### wasm 接口；spec/wasm接口.md
+//
+// 结构说明（2026-08-16 实测修正，与早期草案的差异）：
+// 1. WIT 包顶层只允许 interface/world，共享类型集中在 interface types；
+// 2. WIT 没有 bytes 类型，字节流一律 list<u8>；
+// 3. 导出接口命名 guest（不能与 world 同名 plugin，否则绑定生成代码撞名）。
+// 本文件已经 wit-bindgen 0.60 + wasm32-wasip2（插件侧）与 wasmtime 47（宿主侧）全链路验证。
+
+package anyeasier:plugin;
+
+/// 共享类型（event / action 与全部 record / enum）
+interface types {
+    variant event {
+        control(control-event),            // 控件交互
+        command-finished(command-result),  // 异步命令完成
+        http-response(http-result),        // 异步 HTTP 响应
+        dialog-result(dialog-result),      // 对话框结果
+        timer(u32),                        // 定时器触发
+        config-changed(string),            // 配置被修改（含 key 自动绑定保存后）
+        ui-ready,                          // UI 渲染完成，插件可初始化
+    }
+
+    record control-event { id: string, event: string, value: string }
+    // event 取值：click / change / input / submit / select ...
+
+    record command-result { handle: u32, exit-code: u32, stdout: string, stderr: string, timed-out: bool }
+    record http-result { id: u32, status: u32, headers: list<tuple<string, string>>, body: list<u8> }
+    record dialog-result { id: u32, path: option<string>, canceled: bool }
+
+    variant action {
+        set-value(tuple<string, string>),             // (控件id, 值)
+        set-enabled(tuple<string, bool>),
+        set-visible(tuple<string, bool>),
+        set-options(tuple<string, list<string>>),     // 动态更新下拉 / 列表项
+        run-command(command-options),
+        kill-command(u32),
+        open-dialog(dialog-options),
+        http-request(http-options),
+        set-timer(timer-spec),
+        clear-timer(u32),
+        show-message(message-options),
+        set-config(string),                           // 请求主程序保存配置 JSON
+        close,                                        // 关闭插件界面
+    }
+
+    record command-options { program: string, args: list<string>, cwd: option<string>,
+                             env: list<tuple<string, string>>, timeout-ms: option<u32>, stdin: option<string> }
+    record dialog-options { id: u32, kind: dialog-kind, title: option<string>,
+                            default-path: option<string>, filters: list<file-filter> }
+    record file-filter { name: string, ext: list<string> }
+    record http-options { id: u32, method: http-method, url: string,
+                          headers: list<tuple<string, string>>, body: option<list<u8>>, timeout-ms: option<u32> }
+    record timer-spec { id: u32, interval-ms: u32, repeat: bool }
+    record message-options { kind: message-kind, title: string, text: string }
+
+    enum log-level { debug, info, warn, error }
+    enum dialog-kind { open-file, save-file, open-dir }
+    enum http-method { get, post, put, delete, head }
+    enum message-kind { info, warn, error }
+}
+
+/// 插件导出的接口（主程序调用插件）。
+/// 注意：WIT 单一接口无法声明"可选导出"，绑定生成器要求实现全部 5 个函数；
+/// "可选"是语义约定——get-default-config 返回 none、validate 返回 none、destroy 空实现即视为未提供。
+interface guest {
+    use types.{event, action};
+
+    /// 初始化：加载完成、UI 渲染前调用一次。
+    /// config: 插件配置 JSON；meta: {"api_version":"0.1","app_version":"1.0.0","platform":"windows"}
+    /// 返回 ok() 或 err(原因)；err 时主程序拒绝加载并提示。
+    init: func(config: string, meta: string) -> result<_, string>;
+
+    /// 所有事件入口，返回动作列表；空列表表示无动作。
+    on-event: func(evt: event) -> list<action>;
+
+    /// 返回默认配置 JSON（语义可选，返回 none 即未提供）。
+    get-default-config: func() -> option<string>;
+
+    /// 设置保存前校验，返回错误文本或 none（语义可选）。
+    validate: func(config: string) -> option<string>;
+
+    /// 卸载时清理（语义可选，空实现即可）。
+    destroy: func();
+}
+
+/// 主程序提供给插件的接口（插件调用主程序）
+interface host {
+    use types.{command-options, dialog-options, http-options, log-level};
+
+    // ---- 日志 ----
+    log: func(level: log-level, message: string);
+
+    // ---- 插件数据区（沙箱，路径相对本插件数据区，禁止 .. / 绝对路径 / 其他插件目录）----
+    data-exists: func(path: string) -> result<bool, string>;
+    data-read: func(path: string) -> result<list<u8>, string>;
+    data-write: func(path: string, data: list<u8>) -> result<_, string>;
+    data-delete: func(path: string) -> result<_, string>;
+    data-list: func(dir: string) -> result<list<string>, string>;
+
+    // ---- 配置（存放于插件数据区 config.json，与 ui.xml 的 key 自动绑定共用一份）----
+    config-get: func() -> string;
+    config-set: func(config: string) -> result<_, string>;
+
+    // ---- 密钥链（凭据存储：后端接系统密钥链，service 按插件 ID 命名空间隔离，明文不落盘）----
+    credential-set: func(service: string, account: string, secret: string) -> result<_, string>;
+    credential-get: func(service: string, account: string) -> result<option<string>, string>;
+    credential-delete: func(service: string, account: string) -> result<bool, string>;
+    credential-list: func(service: string) -> result<list<string>, string>;
+
+    // ---- UI ----
+    ui-get: func(id: string) -> option<string>;
+    ui-set: func(id: string, value: string) -> result<_, string>;
+    ui-set-enabled: func(id: string, enabled: bool);
+    ui-set-visible: func(id: string, visible: bool);
+    ui-set-options: func(id: string, options: list<string>);
+
+    // ---- 命令（执行前校验 manifest 的"允许运行的程序"）----
+    run-command: func(opts: command-options) -> result<u32, string>; // 返回句柄
+    kill-command: func(handle: u32);
+
+    // ---- 文件系统（读写前校验 manifest 的"允许读写的文件"）----
+    fs-read: func(path: string) -> result<list<u8>, string>;
+    fs-write: func(path: string, data: list<u8>) -> result<_, string>;
+    fs-list: func(path: string) -> result<list<string>, string>;
+    fs-exists: func(path: string) -> result<bool, string>;
+    fs-delete: func(path: string) -> result<_, string>;
+    fs-mkdir: func(path: string) -> result<_, string>;
+
+    // ---- 对话框 / 网络 / 定时器 ----
+    open-dialog: func(opts: dialog-options) -> result<u32, string>;   // 返回会话 id
+    http-request: func(opts: http-options) -> result<u32, string>;    // 返回请求 id
+    timer-set: func(id: u32, interval-ms: u32, repeat: bool);
+    timer-clear: func(id: u32);
+
+    // ---- 其他 ----
+    plugin-dir: func() -> string;   // 插件安装目录（只读）
+    open-url: func(url: string);
+    clipboard-get: func() -> string;
+    clipboard-set: func(text: string);
+}
+
+/// 世界：插件 = 实现 guest + 依赖 host
+world plugin {
+    import host;
+    export guest;
+}

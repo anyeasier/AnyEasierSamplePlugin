@@ -1,0 +1,24 @@
+[package]
+name = "moonbit-adapter"
+version = "0.1.0"
+edition = "2021"
+license = "Apache-2.0"
+description = "AnyEasier 插件 Rust adapter：以 wasmi 执行内嵌的 MoonBit 裸模块"
+
+[lib]
+crate-type = ["cdylib"]
+
+[dependencies]
+wit-bindgen = "0.60"
+serde_json = "1"
+wasmi = "0.40"
+serde = { version = "1.0.229", features = ["derive"] }
+anyhow = "1.0.104"
+wasmparser = "0.258.0"
+wasm-encoder = "0.258.0"
+
+# 独立 workspace，不并入 MoonBit 项目（它不是 MoonBit 的一部分）
+[workspace]
+
+[dev-dependencies]
+anyhow = "1.0.104"

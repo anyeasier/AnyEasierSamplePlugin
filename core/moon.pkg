@@ -1,0 +1,15 @@
+pkgtype(kind: "foreign_library")
+
+import {
+  "moonbitlang/core/encoding/utf8" @utf8,
+  "anyeasier/anyeasier_sample_plugin/logic" @logic,
+}
+
+options(
+  "link": {
+    "wasm": {
+      "export-memory-name": "memory",
+      "heap-start-address": 2097152,
+    },
+  },
+)

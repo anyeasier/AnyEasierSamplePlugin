@@ -1,0 +1,14 @@
+package anyeasier:mb;
+
+/// MoonBit 逻辑桥：全标量接口（与 wit-mb/mb-bridge.wit 相同）。
+interface bridge {
+    alloc: func(len: u32) -> u32;
+    write-u32: func(offset: u32, word: u32);
+    buf-len: func() -> u32;
+    read-u32: func(offset: u32) -> u32;
+    init: func();
+    on-event: func();
+    get-default-config: func();
+    validate: func();
+    destroy: func();
+}

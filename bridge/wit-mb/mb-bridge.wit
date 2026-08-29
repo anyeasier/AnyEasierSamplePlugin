@@ -1,0 +1,24 @@
+package anyeasier:mb;
+
+/// MoonBit 逻辑桥：全标量接口；数据经 MoonBit 内存中的共享缓冲交换。
+/// 协议见 AnyEasierSamplePlugin/pkg/README.md「ABI 协议」。
+interface bridge {
+    /// 分配请求缓冲，返回基址（4 字节长度头的位置）。
+    alloc: func(len: u32) -> u32;
+    /// 向请求缓冲写入一个 u32（offset 相对 payload 区，字节偏移）。
+    write-u32: func(offset: u32, word: u32);
+    /// 应答数据长度（字节）。
+    buf-len: func() -> u32;
+    /// 从应答字节区读一个 u32（offset 字节偏移，越界补零）。
+    read-u32: func(offset: u32) -> u32;
+    /// 执行：请求/应答缓冲已就绪。
+    init: func();
+    on-event: func();
+    get-default-config: func();
+    validate: func();
+    destroy: func();
+}
+
+world mb {
+    export bridge;
+}

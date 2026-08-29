@@ -1,0 +1,8 @@
+package anyeasier:adapter;
+
+/// Rust adapter 的组合世界：翻译 anyeasier:plugin/guest ↔ MoonBit bridge。
+world adapter {
+    import anyeasier:plugin/host;
+    import anyeasier:mb/bridge;
+    export anyeasier:plugin/guest;
+}
