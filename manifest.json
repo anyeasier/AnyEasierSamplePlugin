@@ -1,0 +1,12 @@
+{
+  "id": "anyeasier.moonbit-sample",
+  "name": "MoonBit 样例",
+  "description": "MoonBit 语言编写的 AnyEasier 测试插件：回显、计数、日志、命令、定时器、数据区",
+  "author": "AnyEasier",
+  "version": "0.1.0",
+  "min_api_version": "0.1",
+  "platforms": ["windows", "macos", "linux"],
+  "allow_programs": ["cmd", "echo"],
+  "allow_files": [],
+  "allow_network": false
+}

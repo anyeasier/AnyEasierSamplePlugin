@@ -1,0 +1,25 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- MoonBit 样例插件界面：与 logic 包支持的控件 id 一一对应 -->
+<ui name="MoonBit 样例" version="1.0" width="480">
+  <vertical spacing="8" padding="12">
+    <field label="输入" grow="1">
+      <input id="echoInput" placeholder="输入点什么，点「回显」试试"/>
+    </field>
+    <horizontal spacing="6">
+      <button id="echoBtn" label="回显" kind="primary"/>
+      <button id="countBtn" label="计数"/>
+      <button id="logBtn" label="写日志"/>
+    </horizontal>
+    <horizontal spacing="6">
+      <button id="cmdBtn" label="运行命令"/>
+      <button id="cancelBtn" label="取消" enabled="false"/>
+      <button id="timerBtn" label="定时器"/>
+    </horizontal>
+    <horizontal spacing="6">
+      <button id="msgBtn" label="弹窗"/>
+      <button id="dataBtn" label="数据区"/>
+    </horizontal>
+    <separator/>
+    <label id="status" text="就绪"/>
+  </vertical>
+</ui>
