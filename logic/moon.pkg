@@ -1,3 +1,5 @@
 import {
-  "moonbitlang/core/encoding/utf8" @utf8
+  "moonbitlang/core/json" @json,
+  "moonbitlang/core/encoding/utf8" @utf8,
+  "anyeasier/anyeasier_sample_plugin/sdk" @sdk,
 }

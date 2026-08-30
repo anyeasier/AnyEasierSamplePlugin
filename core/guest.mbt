@@ -11,11 +11,7 @@
 /// | moon_validate | 配置 JSON | （不合法时错误文本） |
 /// | moon_destroy | （空） | （无） |
 
-///| 插件配置（init 时缓存；config-changed 时更新）。
-let plugin_config : Ref[String] = Ref("{}")
-
-///| 平台（init 时从 meta JSON 缓存）。
-let cached_platform : Ref[String] = Ref("windows")
+let plugin : @logic.SamplePlugin = @logic.get_plugin()
 
 ///|
 #export_name("moon_init")
@@ -25,9 +21,12 @@ pub fn moon_init() -> Unit {
   let cfg_len = u32_le_at(req, 0)
   let meta_len = u32_le_at(req, 4)
   let config = @utf8.decode_lossy(read_region(req, 8, cfg_len)[:])
-  let meta = @utf8.decode_lossy(read_region(req, 8 + cfg_len, meta_len)[:])
-  plugin_config.val = config
-  @logic.set_platform(extract_platform(meta))
+  let meta_json = @utf8.decode_lossy(read_region(req, 8 + cfg_len, meta_len)[:])
+  let meta = @sdk.parse_meta(meta_json)
+  if meta.api_version != @sdk.SDK_API_VERSION {
+    abort("AnyEasier API version mismatch: expected \{@sdk.SDK_API_VERSION}, got \{meta.api_version}")
+  }
+  plugin.init(config~, meta~)
 }
 
 ///|
@@ -36,14 +35,25 @@ pub fn moon_on_event() -> Unit {
   ensure_memory()
   let req = read_request()
   let evt_json = @utf8.decode_lossy(req[:])
-  write_reply(@utf8.encode(@logic.handle_event(evt_json)[:]))
+  let actions = try {
+    let evt = @sdk.parse_event(evt_json)
+    plugin.handle_event(event=evt)
+  } catch {
+    err => [
+      @sdk.Action::Log(level=Error, message="SDK 异常：\{err}｜输入长度 \{evt_json.length()}｜内容：\{evt_json}")
+    ]
+  }
+  write_reply(@utf8.encode(@sdk.render_actions(actions)))
 }
 
 ///|
 #export_name("moon_get_default_config")
 pub fn moon_get_default_config() -> Unit {
   ensure_memory()
-  write_reply(@utf8.encode(@logic.default_config()[:]))
+  match plugin.default_config() {
+    Some(cfg) => write_reply(@utf8.encode(cfg[:]))
+    None => write_reply(b"")
+  }
 }
 
 ///|
@@ -52,7 +62,7 @@ pub fn moon_validate() -> Unit {
   ensure_memory()
   let req = read_request()
   let config = @utf8.decode_lossy(req[:])
-  match @logic.validate_config(config) {
+  match plugin.validate(config~) {
     None => write_reply(b"")
     Some(msg) => write_reply(@utf8.encode(msg[:]))
   }
@@ -62,9 +72,7 @@ pub fn moon_validate() -> Unit {
 #export_name("moon_destroy")
 pub fn moon_destroy() -> Unit {
   ensure_memory()
-  // 无需清理：实例随 adapter 一起销毁
-  ()
-
+  plugin.destroy()
 }
 
 ///|
@@ -95,20 +103,5 @@ fn get_or_zero(b : Byte?) -> Byte {
   match b {
     Some(x) => x
     None => b'\x00'
-  }
-}
-
-///|
-/// meta JSON 形如 {"api_version":"0.1","app_version":"0.1.0","platform":"windows"}。
-fn extract_platform(meta_json : String) -> String {
-  try {
-    let meta = @json.parse(meta_json)
-    guard meta is Object(fields)
-    match fields.get("platform") {
-      Some(Json::String(p)) => p
-      _ => "windows"
-    }
-  } catch {
-    _ => "windows"
   }
 }

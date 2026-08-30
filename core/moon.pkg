@@ -2,6 +2,7 @@ pkgtype(kind: "foreign_library")
 
 import {
   "moonbitlang/core/encoding/utf8" @utf8,
+  "anyeasier/anyeasier_sample_plugin/sdk" @sdk,
   "anyeasier/anyeasier_sample_plugin/logic" @logic,
 }
 
