@@ -1,0 +1,9 @@
+{
+  "request_base": "0x100000",
+  "request_capacity": "0x10000",
+  "reply_base": "0x180000",
+  "reply_capacity": "0x10000",
+  "heap_start_address": "0x200000",
+  "heap_start_bytes": 2097152,
+  "min_memory_pages": 32
+}
