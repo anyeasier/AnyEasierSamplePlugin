@@ -18,6 +18,19 @@ use anyeasier::mb::bridge;
 use anyeasier::plugin::host;
 use anyeasier::plugin::types::{Action, CommandOptions, Event, MessageKind};
 use exports::anyeasier::plugin::guest::Guest;
+use std::cell::Cell;
+
+///| 最近一次 `host::run_command` 返回的句柄（0 = 尚未发起过命令）。
+///
+/// 宿主的命令句柄从 1 起，而 SDK 的 `KillLastCommand` 动作序列化后不带
+/// handle（`{"type":"kill-command"}`），必须由 adapter 用这里记录的值填充，
+/// 否则会退化成 `KillCommand(0)`——宿主精确匹配句柄，于是"取消"永远静默无操作。
+struct LastHandle(Cell<u32>);
+
+// adapter 是单线程组件（wasm32-wasip2，未启用 threads），不存在并发访问。
+unsafe impl Sync for LastHandle {}
+
+static LAST_COMMAND_HANDLE: LastHandle = LastHandle(Cell::new(0));
 
 ///| guest 导出：翻译层。业务决策全部在 MoonBit。
 struct Adapter;
@@ -162,7 +175,10 @@ fn action_from_json(v: &serde_json::Value) -> Option<Action> {
                 .map_err(|e| e.to_string())
                 .and_then(|o| host::run_command(&o.into()))
             {
-                Ok(_) => None,
+                Ok(handle) => {
+                    LAST_COMMAND_HANDLE.0.set(handle);
+                    None
+                }
                 Err(e) => {
                     host::log(
                         anyeasier::plugin::types::LogLevel::Error,
@@ -240,9 +256,22 @@ fn action_from_json(v: &serde_json::Value) -> Option<Action> {
         "clear-timer" => Some(Action::ClearTimer(
             v.get("id").and_then(|x| x.as_u64()).unwrap_or(0) as u32,
         )),
-        "kill-command" => Some(Action::KillCommand(
-            v.get("handle").and_then(|x| x.as_u64()).unwrap_or(0) as u32,
-        )),
+        "kill-command" => {
+            // SDK 的 KillLastCommand 不带 handle，回填 adapter 记录的最近一次句柄
+            let handle = match v.get("handle").and_then(|x| x.as_u64()) {
+                Some(h) => h as u32,
+                None => LAST_COMMAND_HANDLE.0.get(),
+            };
+            if handle == 0 {
+                host::log(
+                    anyeasier::plugin::types::LogLevel::Warn,
+                    "kill-command 被忽略：既未指定 handle，也没有记录到运行中的命令",
+                );
+                None
+            } else {
+                Some(Action::KillCommand(handle))
+            }
+        }
         "close" => Some(Action::Close),
         _ => {
             host::log(

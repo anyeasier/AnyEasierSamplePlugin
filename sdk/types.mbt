@@ -109,11 +109,28 @@ pub(all) struct Meta {
   platform : String // "windows" | "macos" | "linux"
 } derive(Eq, Show, Debug)
 
+/// 插件契约。
+///
+/// 方案（1.2）为 init / validate / default_config / destroy 设计了默认实现，
+/// 但本机 moon 0.1.20260827 的 trait 声明**不支持默认方法体**：
+/// `f(Self) -> T { .. }` 直接 `Parse error, unexpected token '{'`
+/// （`= fn(..) { .. }` 与 `fn f(self : Self) -> T { .. }` 同样无法解析）。
+/// 因此五方法全部抽象，最小插件按下列语义补齐即可：
+///
+/// - `init` 忽略参数：`fn init(_self, config~, meta~) -> Unit { () }`
+/// - `validate` 不校验：`fn validate(_self, config~) -> String? { None }`
+/// - `default_config` 无默认值：`fn default_config(_self) -> String? { None }`
+/// - `destroy` 无清理：`fn destroy(_self) -> Unit { () }`
 pub(open) trait Plugin {
+  /// 加载完成、UI 渲染前调用一次。
   init(Self, config~ : String, meta~ : Meta) -> Unit
+  /// 唯一必须实现：所有事件的入口。
   handle_event(Self, event~ : Event) -> Array[Action]
+  /// 设置保存前校验；None = 合法。
   validate(Self, config~ : String) -> String?
+  /// 默认配置 JSON，无则 None。
   default_config(Self) -> String?
+  /// 卸载清理。
   destroy(Self) -> Unit
 }
 
