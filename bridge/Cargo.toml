@@ -2,7 +2,7 @@
 name = "moonbit-adapter"
 version = "0.1.0"
 edition = "2021"
-license = "Apache-2.0"
+license = "MIT"
 description = "AnyEasier 插件 Rust adapter：以 wasmi 执行内嵌的 MoonBit 裸模块"
 
 [lib]

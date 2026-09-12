@@ -1,67 +1,60 @@
-# AnyEasierSamplePlugin（MoonBit 样例插件）
+# MoonBit 样例
 
-用 [MoonBit](https://www.moonbitlang.com/) 编写 AnyEasier 插件的完整示范。
+[AnyEasier](https://github.com/anyeasier/AnyEasier) 的官方样例插件，
+用 [MoonBit](https://www.moonbitlang.com) 编写。
 
-## 架构
+一个输入框加八个按钮，每个按钮演示一种插件能力。既能当功能演示台用，
+也适合当"MoonBit 插件怎么写"的参考实现读。
 
-AnyEasier 插件是 WASI 组件（wasm32-wasip2 / Component Model），而 MoonBit
-当前（moon 0.1.2026.08）尚无组件目标——只能编译到**裸 wasm 模块**。本项目
-用一层极薄的 Rust adapter 打通：
+## 界面上有什么
 
-```
-┌─────────────────────────────────────────────┐
-│  main.wasm（WASI 组件，manifest 声明的插件） │
-│                                             │
-│  Rust adapter（wit-bindgen 实现 guest）      │
-│    ├─ WIT guest 导出：init/on-event/…        │
-│    ├─ WIT host 导入：log/ui_get/fs/…         │
-│    └─ wasmi 解释器 ── 内嵌 MoonBit 裸模块     │
-│         ├─ 导出 moon_init/moon_on_event/…    │
-│         └─ 导入 "anyeasier" 模块（host 桥）   │
-└─────────────────────────────────────────────┘
-```
+| 按钮 | 做什么 |
+| --- | --- |
+| 回显 | 把你输入的内容原样显示在状态栏 |
+| 计数 | 每点一次加一，演示跨事件保存状态 |
+| 写日志 | 往日志面板写一条 Info 和一条 Warn |
+| 运行命令 | 跑一个 `echo` 命令（Windows 上用 `cmd /C echo`），结果显示在状态栏 |
+| 取消 | 终止正在运行的命令 |
+| 定时器 | 每 500 毫秒触发一次，三次后自动停止 |
+| 弹窗 | 弹一个提示框 |
+| 数据区 | 往插件自己的沙箱目录写一个文本文件 |
 
-- **业务逻辑 100% MoonBit**（`logic/` 包）：事件 JSON → 动作 JSON，纯逻辑
-  可单测（fake bridge 注入，`moon test` 全绿）。
-- **core/ 包**：ABI 边界。MoonBit 通过 `extern "wasm"` 内联 WAT 访问自己的
-  线性内存，实现共享缓冲协议（`moon_alloc` / `moon_buf_ptr` / `moon_buf_len`）
-  和宿主导入绑定（`"anyeasier" "log"` 等）。
-- **bridge/（Rust adapter）**：`include_bytes!` 内嵌 MoonBit 裸模块，用
-  wasmi 实例化，把 WIT 类型 ↔ JSON、host 接口 ↔ "anyeasier" 导入桥接起来。
-  它不含任何插件业务逻辑，换一个插件只需重写 MoonBit 侧。
+底部的状态栏显示最近一次操作的结果。
 
-## ABI 协议（core ↔ adapter）
+## 权限
 
-- 请求：adapter 调 `moon_alloc(n)` 得基址 → 写 `[len:u32 LE][payload]` →
-  调 `moon_init` / `moon_on_event` / `moon_validate` / `moon_destroy`（无参）。
-- 应答：adapter 调 `moon_buf_ptr()` / `moon_buf_len()` 读取 `[len][payload]`。
-- `moon_init` 的 payload：`[cfgLen:u32][metaLen:u32][cfg][meta]`。
-- 宿主导入（MoonBit → adapter）：字符串经 MoonBit scratch 区按
-  `(ptr, len)` 传址；「返回字符串」的导入由 adapter 把结果写进 MoonBit
-  内存（临时 grow 的页），并把 `(ptr, len)` 写到 MoonBit 提供的 out 参数区；
-  `ui_get` 无值时 len 置 `0xFFFFFFFF`。
+这个插件申请的权限很少：
 
-## 构建
+- **允许运行的程序**：`cmd`、`echo`（就是上面"运行命令"按钮用的）
+- **允许读写的文件**：无
+- **允许访问网络**：否
 
-依赖：moon、Rust（wasm32-wasip2 target）、PowerShell（打 zip）。
+它写入的"数据区"是 AnyEasier 分给每个插件的专属沙箱目录，
+不需要额外权限，也碰不到你的其他文件。卸载插件时数据区一并删除。
 
-```bash
-./build.sh          # 产出 dist/moonbit-sample.zip
-```
+## 支持的平台
 
-然后在 AnyEasier 商店页「从本地 ZIP 安装」。
+Windows、macOS、Linux。插件本身是 WebAssembly，跨平台；
+"运行命令"按钮会按当前系统自动选用 `cmd` 或 `echo`。
 
-## 测试
+## 源码与开发
 
-```bash
-moon test           # logic 包 14 个用例（fake bridge）
-```
+仓库：[anyeasier/AnyEasierSamplePlugin](https://github.com/anyeasier/AnyEasierSamplePlugin)
 
-## 目录
+架构说明、构建步骤、测试方式都在仓库的 README 里。
+想自己写插件，从
+[插件开发教程](https://github.com/anyeasier/AnyEasier/blob/main/docs/plugin-development/README.md)
+开始——`aep new` 生成的项目就是以这个插件为模板的。
 
-```
-logic/   插件业务逻辑（纯 MoonBit，可测）
-core/    ABI 边界（内联 WAT 内存原语 + 宿主导入绑定 + guest 导出）
-bridge/  Rust adapter（wasmi + wit-bindgen，无业务逻辑）
-pkg/     插件包静态文件（manifest.json / ui.xml / README.md）
-```
+## 已知限制
+
+MoonBit 的插件 SDK 目前只覆盖了宿主能力的一部分，所以这个样例没有演示：
+
+- HTTP 请求
+- 文件选择对话框
+- 读写任意文件
+- 系统密钥链
+- 主动保存配置
+
+这些能力用 Rust 写插件时全部可用。完整清单见
+[MoonBit 插件教程的能力缺口一节](https://github.com/anyeasier/AnyEasier/blob/main/docs/plugin-development/07-moonbit-plugins.md#当前的能力缺口)。
